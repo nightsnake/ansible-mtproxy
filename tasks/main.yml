@@ -1,0 +1,64 @@
+---
+- name: install packages
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - git
+    - curl
+    - build-essential
+    - libssl-dev
+    - zlib1g-dev
+
+- name: Check the MTProxy binary is exist
+  stat: 
+    path: "{{ mtproxy_dir }}/objs/bin/mtproto-proxy"
+  register: mtproto_proxy
+  
+- name: Clone MTProxy from git
+  git:
+    repo: https://github.com/TelegramMessenger/MTProxy
+    dest: "{{ mtproxy_dir }}"
+
+- name: Make the project
+  make:
+    chdir: "{{ mtproxy_dir }}"
+
+- name: Get the secret
+  uri:
+    url: https://core.telegram.org/getProxySecret
+    method: GET
+    return_content: yes  
+    validate_certs: yes
+    dest: "{{ mtproxy_dir }}/objs/bin/proxy-secret"
+    creates: "{{ mtproxy_dir }}/objs/bin/proxy-secret"
+
+- name: Get the config
+  uri:
+    url: https://core.telegram.org/getProxyConfig
+    method: GET
+    return_content: yes
+    validate_certs: yes
+    dest: "{{ mtproxy_dir }}/objs/bin/proxy-multi.conf"
+    creates: "{{ mtproxy_dir }}/objs/bin/proxy-multi.conf"
+
+- name: Make the secret  
+  shell: head -c 16 /dev/urandom | xxd -ps
+  register: mtproxy_secret
+
+- name: Install MTProxy as a service
+  template:
+    src: mtproxy-systemd.j2
+    dest: /etc/systemd/system/MTProxy.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: service_changed
+   
+- name: Reload systemd service
+  systemd:
+    daemon_reload: yes
+    name: MTProxy
+    state: restarted
+    enabled: yes
+  when: service_changed.changed

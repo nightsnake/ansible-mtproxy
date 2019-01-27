@@ -1,0 +1,5 @@
+- name: restart MTProxy
+  service:
+    name: "MTProxy.service"
+    state: restarted
+
